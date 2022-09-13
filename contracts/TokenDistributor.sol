@@ -16,26 +16,16 @@ import { IGearToken } from "./interfaces/IGearToken.sol";
 import { StepVesting } from "./Vesting.sol";
 import { IStepVesting } from "./interfaces/IStepVesting.sol";
 import { ITokenDistributorOld, VestingContract, VotingPower } from "./interfaces/ITokenDistributorOld.sol";
+import { ITokenDistributor, TokenAllocationOpts } from "./interfaces/ITokenDistributor.sol";
 
-contract TokenDistributor {
+contract TokenDistributor is ITokenDistributor {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @dev Address of the treasury
-    address treasury;
-
-    /// @dev Struct containing parameters to initialize a new vesting contract
-    struct TokenAllocationOpts {
-        address recipient;
-        string votingCategory;
-        uint256 cliffDuration;
-        uint256 cliffAmount;
-        uint256 vestingDuration;
-        uint256 vestingNumSteps;
-        uint256 vestingAmount;
-    }
+    address public immutable treasury;
 
     /// @dev GEAR token
-    IGearToken public gearToken;
+    IGearToken public immutable gearToken;
 
     /// @dev Address of master contract to clone
     address public immutable masterVestingContract;
@@ -44,37 +34,13 @@ contract TokenDistributor {
     mapping(address => EnumerableSet.AddressSet) internal vestingContracts;
 
     /// @dev Mapping from vesting contracts to their voting power categories
-    mapping(address => string) internal vestingContractVotingCategory;
+    mapping(address => string) public vestingContractVotingCategory;
 
     /// @dev Mapping from voting categories to corresponding voting power multipliers
     mapping(string => uint16) public votingCategoryMultipliers;
 
     /// @dev Set of all known contributors
     EnumerableSet.AddressSet private contributorsSet;
-
-    /// @dev Thrown if there is leftover GEAR in the contract after distribution
-    error NonZeroBalanceAfterDistributionException(uint256 amount);
-
-    /// @dev Thrown if attempting to do an action for an address that is not a contributor
-    error ContributorNotRegisteredException(address user);
-
-    /// @dev Emits when a multiplier for a voting category is updated
-    event NewVotingMultiplier(string indexed category, uint16 multiplier);
-
-    /// @dev Emits when a new vesting contract is added
-    event VestingContractAdded(
-        address indexed holder,
-        address indexed vestingContract,
-        uint256 amount,
-        string votingPowerCategory
-    );
-
-    /// @dev Emits when the contributor associated with a vesting contract is changed
-    event VestingContractReceiverUpdated(
-        address indexed vestingContract,
-        address indexed prevReceiver,
-        address indexed newReceiver
-    );
 
     /// @param addressProvider address of Address provider
     /// @param tokenDistributorOld Address of the previous token distributor
@@ -130,7 +96,7 @@ contract TokenDistributor {
 
     modifier treasuryOnly() {
         if (msg.sender != treasury) {
-            revert("Function is restricted to financial multisig");
+            revert NotTreasuryException();
         }
         _;
     }
@@ -196,8 +162,7 @@ contract TokenDistributor {
 
     /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
     ///      and vesting contracts, for a particular contributor
-    function updateContributor(address contributor) public {
-
+    function updateContributor(address contributor) external {
         if (!contributorsSet.contains(contributor)) {
             revert ContributorNotRegisteredException(contributor);
         }
@@ -227,7 +192,7 @@ contract TokenDistributor {
         uint16 multiplier
     ) external treasuryOnly {
         if (multiplier > PERCENTAGE_FACTOR) {
-            revert("Multiplier can't be greater than 1");
+            revert MultiplierValueIncorrect();
         }
 
         votingCategoryMultipliers[category] = multiplier;

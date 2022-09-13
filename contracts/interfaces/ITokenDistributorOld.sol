@@ -27,4 +27,8 @@ interface ITokenDistributorOld {
     function weightB() external view returns (uint256);
 
     function contributorsList() external view returns (address[] memory);
+
+    function countContributors() external view returns (uint256);
+
+    function balanceOf(address) external view returns (uint256);
 }

@@ -19,4 +19,18 @@ interface IStepVesting {
         uint256 _numOfSteps,
         address _receiver
     ) external;
+
+    function setReceiver(address) external;
+
+    function cliffDuration() external view returns (uint256);
+
+    function stepDuration() external view returns (uint256);
+
+    function cliffAmount() external view returns (uint256);
+
+    function stepAmount() external view returns (uint256);
+
+    function numOfSteps() external view returns (uint256);
+
+    function claimed() external view returns (uint256);
 }

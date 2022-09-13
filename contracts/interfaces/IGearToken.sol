@@ -69,4 +69,6 @@ interface IGearToken is IERC20 {
         external
         view
         returns (uint96);
+
+    function setMiner(address) external;
 }
