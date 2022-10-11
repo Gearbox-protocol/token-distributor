@@ -24,6 +24,9 @@ interface ITokenDistributorExceptions {
     /// @dev Thrown if an access-restricted function is called by other than the treasury multisig
     error NotTreasuryException();
 
+    /// @dev Thrown if an access-restricted function is called by other than the distribution controller
+    error NotDistributionControllerException();
+
     /// @dev Thrown if a voting multiplier value does not pass sanity checks
     error MultiplierValueIncorrect();
 }
@@ -31,6 +34,9 @@ interface ITokenDistributorExceptions {
 interface ITokenDistributorEvents {
     /// @dev Emits when a multiplier for a voting category is updated
     event NewVotingMultiplier(string indexed category, uint16 multiplier);
+
+    /// @dev Emits when a new distribution controller is set
+    event NewDistrubtionController(address newController);
 
     /// @dev Emits when a new vesting contract is added
     event VestingContractAdded(

@@ -24,6 +24,9 @@ contract TokenDistributor is ITokenDistributor {
     /// @dev Address of the treasury
     address public immutable treasury;
 
+    /// @dev Address responsible for managing vesting contracts
+    address public distributionController;
+
     /// @dev GEAR token
     IGearToken public immutable gearToken;
 
@@ -44,13 +47,16 @@ contract TokenDistributor is ITokenDistributor {
 
     /// @param addressProvider address of Address provider
     /// @param tokenDistributorOld Address of the previous token distributor
+    /// @param _distributionController The address of the initial distribution controller
     constructor(
         IAddressProvider addressProvider,
-        ITokenDistributorOld tokenDistributorOld
+        ITokenDistributorOld tokenDistributorOld,
+        address _distributionController
     ) {
         masterVestingContract = tokenDistributorOld.masterVestingContract();
         gearToken = IGearToken(addressProvider.getGearToken()); // T:[TD-1]
         treasury = addressProvider.getTreasuryContract();
+        distributionController = _distributionController;
 
         uint16 weightA = uint16(tokenDistributorOld.weightA());
         uint16 weightB = uint16(tokenDistributorOld.weightB());
@@ -92,6 +98,13 @@ contract TokenDistributor is ITokenDistributor {
                 votingCategory
             );
         }
+    }
+
+    modifier distributionControllerOnly() {
+        if (msg.sender != distributionController) {
+            revert NotDistributionControllerException();   
+        }
+        _;
     }
 
     modifier treasuryOnly() {
@@ -143,16 +156,10 @@ contract TokenDistributor is ITokenDistributor {
     ///             * vestingAmount - total number of tokens unlocked during the vesting period (excluding cliff)
     function distributeTokens(TokenAllocationOpts[] calldata opts)
         external
-        treasuryOnly
+        distributionControllerOnly
     {
         for (uint256 i = 0; i < opts.length; ++i) {
             _deployVestingContract(opts[i]);
-        }
-
-        uint256 finalBalance = gearToken.balanceOf(address(this));
-
-        if (finalBalance != 0) {
-            revert NonZeroBalanceAfterDistributionException(finalBalance);
         }
     }
 
@@ -162,7 +169,7 @@ contract TokenDistributor is ITokenDistributor {
 
     /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
     ///      and vesting contracts, for a particular contributor
-    function updateContributor(address contributor) external {
+    function updateContributor(address contributor) external distributionControllerOnly {
         if (!contributorsSet.contains(contributor)) {
             revert ContributorNotRegisteredException(contributor);
         }
@@ -171,7 +178,7 @@ contract TokenDistributor is ITokenDistributor {
 
     /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
     ///      and vesting contracts, for all recorded contributors
-    function updateContributors() external {
+    function updateContributors() external distributionControllerOnly {
         address[] memory contributorsArray = contributorsSet.values();
         uint256 numContributors = contributorsArray.length;
 
@@ -181,7 +188,7 @@ contract TokenDistributor is ITokenDistributor {
     }
 
     //
-    // VOTING POWER CONTROLS
+    // CONFIGURATION
     //
 
     /// @dev Updates the voting weight for a particular voting category
@@ -197,6 +204,15 @@ contract TokenDistributor is ITokenDistributor {
 
         votingCategoryMultipliers[category] = multiplier;
         emit NewVotingMultiplier(category, multiplier);
+    }
+    
+    /// @dev Changes the distribution controller
+    /// @param newController Address of the new distribution controller
+    function setDistributionController(
+        address newController
+    ) external treasuryOnly {
+        distributionController = newController;
+        emit NewDistrubtionController(newController);
     }
 
     //
@@ -250,8 +266,6 @@ contract TokenDistributor is ITokenDistributor {
         _addVestingContractForContributor(opts.recipient, vc);
 
         vestingContractVotingCategory[vc] = opts.votingCategory;
-
-        gearToken.transfer(vc, opts.cliffAmount + opts.vestingAmount);
 
         emit VestingContractAdded(
             opts.recipient,

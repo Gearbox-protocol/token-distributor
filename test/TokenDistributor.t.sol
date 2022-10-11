@@ -13,7 +13,7 @@ import { ITokenDistributorOld } from "../contracts/interfaces/ITokenDistributorO
 import { IAddressProvider } from "../contracts/interfaces/IAddressProvider.sol";
 import { ITokenDistributorExceptions, ITokenDistributorEvents, TokenAllocationOpts } from "../contracts/interfaces/ITokenDistributor.sol";
 import { IStepVesting } from "../contracts/interfaces/IStepVesting.sol";
-import { DUMB_ADDRESS, DUMB_ADDRESS2, SECONDS_PER_YEAR, WAD } from "./constants.sol";
+import { DUMB_ADDRESS, DUMB_ADDRESS2, CONTROLLER, SECONDS_PER_YEAR, WAD } from "./constants.sol";
 import { PERCENTAGE_FACTOR } from "../contracts/helpers/Constants.sol";
 
 address constant ADDRESS_PROVIDER = 0xcF64698AFF7E5f27A11dff868AF228653ba53be0;
@@ -41,7 +41,8 @@ contract TokenDistributorTest is
 
         tokenDistributor = new TokenDistributor(
             addressProvider,
-            tokenDistributorOld
+            tokenDistributorOld,
+            CONTROLLER
         );
 
         root = Ownable(addressProvider.getACL()).owner();
@@ -133,16 +134,10 @@ contract TokenDistributorTest is
             vestingAmount: 365 * 8 * WAD
         });
 
-        vm.expectRevert(NotTreasuryException.selector);
+        vm.expectRevert(NotDistributionControllerException.selector);
         tokenDistributor.distributeTokens(testOpts);
 
         address treasury = addressProvider.getTreasuryContract();
-
-        hoax(treasury);
-        gearToken.transfer(address(tokenDistributor), (365 * 13 + 100) * WAD);
-
-        hoax(root);
-        gearToken.setMiner(address(tokenDistributor));
 
         vm.expectEmit(true, false, false, true);
         emit VestingContractAdded(
@@ -168,7 +163,7 @@ contract TokenDistributorTest is
             "TYPE_ZERO"
         );
 
-        vm.prank(treasury);
+        vm.prank(CONTROLLER);
         tokenDistributor.distributeTokens(testOpts);
 
         address[] memory vcs0 = tokenDistributor.contributorVestingContracts(
@@ -288,38 +283,6 @@ contract TokenDistributorTest is
         );
     }
 
-    /// @dev [TD-4]: distributeTokens reverts when the entire balance wasn't distributed
-    function test_TD_04_distributeTokens_works_correctly() public {
-        TokenAllocationOpts[] memory testOpts = new TokenAllocationOpts[](1);
-
-        testOpts[0] = TokenAllocationOpts({
-            recipient: DUMB_ADDRESS,
-            votingCategory: "TYPE_A",
-            cliffDuration: SECONDS_PER_YEAR,
-            cliffAmount: 0,
-            vestingDuration: SECONDS_PER_YEAR,
-            vestingNumSteps: 365,
-            vestingAmount: 365 * WAD
-        });
-
-        address treasury = addressProvider.getTreasuryContract();
-
-        hoax(treasury);
-        gearToken.transfer(address(tokenDistributor), 365 * WAD + 1);
-
-        hoax(root);
-        gearToken.setMiner(address(tokenDistributor));
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                NonZeroBalanceAfterDistributionException.selector,
-                1
-            )
-        );
-        vm.prank(treasury);
-        tokenDistributor.distributeTokens(testOpts);
-    }
-
     /// @dev [TD-5]: balanceOf returns expected amount
     function test_TD_05_balanceOf_returns_expected_amount(
         uint256 cliffAmount0,
@@ -377,18 +340,9 @@ contract TokenDistributorTest is
         });
 
         hoax(treasury);
-        gearToken.transfer(
-            address(tokenDistributor),
-            cliffAmount0 + vestingAmount0 + cliffAmount1 + vestingAmount1
-        );
-
-        hoax(treasury);
         gearToken.transfer(DUMB_ADDRESS, userBalance);
 
-        hoax(root);
-        gearToken.setMiner(address(tokenDistributor));
-
-        vm.prank(treasury);
+        vm.prank(CONTROLLER);
         tokenDistributor.distributeTokens(testOpts);
 
         uint256 expectedAmount = userBalance +
@@ -396,6 +350,20 @@ contract TokenDistributorTest is
             PERCENTAGE_FACTOR +
             ((cliffAmount1 + vestingAmount1) * votingMultiplier1) /
             PERCENTAGE_FACTOR;
+
+        address[] memory vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
+
+        hoax(treasury);
+        gearToken.transfer(
+            vcs[0],
+            cliffAmount0 + vestingAmount0
+        );
+
+        hoax(treasury);
+        gearToken.transfer(
+            vcs[1],
+            cliffAmount1 + vestingAmount1
+        );
 
         assertEq(
             tokenDistributor.balanceOf(DUMB_ADDRESS),
@@ -451,13 +419,7 @@ contract TokenDistributorTest is
 
         address treasury = addressProvider.getTreasuryContract();
 
-        hoax(treasury);
-        gearToken.transfer(address(tokenDistributor), 365 * 5 * WAD);
-
-        hoax(root);
-        gearToken.setMiner(address(tokenDistributor));
-
-        vm.prank(treasury);
+        vm.prank(CONTROLLER);
         tokenDistributor.distributeTokens(testOpts);
 
         address[] memory vcs = tokenDistributor.contributorVestingContracts(
@@ -467,11 +429,25 @@ contract TokenDistributorTest is
         address vc0 = vcs[0];
         address vc1 = vcs[1];
 
+        hoax(treasury);
+        gearToken.transfer(vc0, 365 * WAD);
+
+        hoax(treasury);
+        gearToken.transfer(vc1, 365 * 4 * WAD);
+
         vm.prank(DUMB_ADDRESS);
         IStepVesting(vc0).setReceiver(DUMB_ADDRESS2);
 
         deal(address(gearToken), vc1, 0);
 
+        hoax(CONTROLLER);
+        tokenDistributor.updateContributors();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NotDistributionControllerException.selector
+            )
+        );
         tokenDistributor.updateContributor(DUMB_ADDRESS);
 
         vm.expectRevert(
@@ -480,6 +456,7 @@ contract TokenDistributorTest is
                 DUMB_ADDRESS
             )
         );
+        hoax(CONTROLLER);
         tokenDistributor.updateContributor(DUMB_ADDRESS);
 
         vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS2);
@@ -515,13 +492,7 @@ contract TokenDistributorTest is
 
         address treasury = addressProvider.getTreasuryContract();
 
-        hoax(treasury);
-        gearToken.transfer(address(tokenDistributor), 365 * 5 * WAD);
-
-        hoax(root);
-        gearToken.setMiner(address(tokenDistributor));
-
-        vm.prank(treasury);
+        vm.prank(CONTROLLER);
         tokenDistributor.distributeTokens(testOpts);
 
         address[] memory vcs = tokenDistributor.contributorVestingContracts(
@@ -531,12 +502,26 @@ contract TokenDistributorTest is
         address vc0 = vcs[0];
         address vc1 = vcs[1];
 
+        hoax(treasury);
+        gearToken.transfer(vc0, 365 * WAD);
+
+        hoax(treasury);
+        gearToken.transfer(vc1, 365 * 4 * WAD);
+
         vm.prank(DUMB_ADDRESS);
         IStepVesting(vc0).setReceiver(DUMB_ADDRESS2);
 
         deal(address(gearToken), vc1, 0);
 
+        hoax(CONTROLLER);
         tokenDistributor.updateContributors();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NotDistributionControllerException.selector
+            )
+        );
+        tokenDistributor.updateContributor(DUMB_ADDRESS);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -544,6 +529,7 @@ contract TokenDistributorTest is
                 DUMB_ADDRESS
             )
         );
+        hoax(CONTROLLER);
         tokenDistributor.updateContributor(DUMB_ADDRESS);
 
         vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS2);
@@ -551,5 +537,23 @@ contract TokenDistributorTest is
         assertEq(vcs.length, 1, "Second contributor was not updated");
 
         assertEq(vcs[0], vc0, "Contract receiver was not changed");
+    }
+
+
+    function test_TD_09_setDistributionController_works_correctly() public {
+
+        address treasury = addressProvider.getTreasuryContract();
+
+        vm.expectRevert(NotTreasuryException.selector);
+        tokenDistributor.setDistributionController(DUMB_ADDRESS2);
+
+        vm.prank(treasury);
+        tokenDistributor.setDistributionController(DUMB_ADDRESS2);
+
+        assertEq(
+            tokenDistributor.distributionController(),
+            DUMB_ADDRESS2,
+            "Distribution controller was not set"
+        );
     }
 }
