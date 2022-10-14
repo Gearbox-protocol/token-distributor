@@ -43,9 +43,11 @@ more tech-related infromation about the protocol, contract interfaces, integrati
 
 Running Forge unit tests requires Foundry. See [Foundry Book](https://book.getfoundry.sh/getting-started/installation) for installation details.
 
-### Solidity unit tests
+### Solidity tests
 
-`forge t`
+`yarn test`
+
+This requires a .env file with `ETH_MAINNET_PROVIDER` and (optionally) `ETH_MAINNET_BLOCK`, or setting the environment variables manually.
 
 ## Licensing
 
