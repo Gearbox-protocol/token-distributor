@@ -19,7 +19,7 @@ The `TokenDistributor.sol` contract has two main access roles:
 1) Treasury is the Gearbox DAO financial multisig / contract; it can change voting weights and add new ones, as well as set the distribution controller;
 2) The distribution controller is the EOA or a contract address appointed by the treasury; it can deploy new vesting contracts (that are recognized and accounted for by `TokenDistributor`) and clean up already emptied contracts from corresponding lists.
 
-### Token dsitribution
+### Token distribution
 
 Note that while the distribution controller can deploy new vesting contracts by calling `distributeTokens()`, they do not have direct access to minting / transferring GEAR. It is intended for the treasury to verify the conditions of deployed vesting contracts, and then directly send the appropriate amount of GEAR to each contract.
 
