@@ -29,6 +29,9 @@ interface ITokenDistributorExceptions {
 
     /// @dev Thrown if a voting multiplier value does not pass sanity checks
     error MultiplierValueIncorrect();
+
+    /// @dev Thrown if voting category doesn't exist
+    error VotingCategoryDoesntExists();
 }
 
 interface ITokenDistributorEvents {
@@ -40,46 +43,29 @@ interface ITokenDistributorEvents {
 
     /// @dev Emits when a new vesting contract is added
     event VestingContractAdded(
-        address indexed holder,
-        address indexed vestingContract,
-        uint256 amount,
-        string votingPowerCategory
+        address indexed holder, address indexed vestingContract, uint256 amount, string votingPowerCategory
     );
 
     /// @dev Emits when the contributor associated with a vesting contract is changed
     event VestingContractReceiverUpdated(
-        address indexed vestingContract,
-        address indexed prevReceiver,
-        address indexed newReceiver
+        address indexed vestingContract, address indexed prevReceiver, address indexed newReceiver
     );
 }
 
-interface ITokenDistributor is
-    ITokenDistributorExceptions,
-    ITokenDistributorEvents
-{
-    function distributeTokens(TokenAllocationOpts[] calldata opts) external;
+interface ITokenDistributor is ITokenDistributorExceptions, ITokenDistributorEvents {
+    function distributeTokens(TokenAllocationOpts calldata opts) external;
 
     function updateContributor(address contributor) external;
 
     function updateContributors() external;
 
-    function updateVotingCategoryMultiplier(
-        string calldata category,
-        uint16 multiplier
-    ) external;
+    function updateVotingCategoryMultiplier(string calldata category, uint16 multiplier) external;
 
-    function balanceOf(address holder)
-        external
-        view
-        returns (uint256 vestedBalanceWeighted);
+    function balanceOf(address holder) external view returns (uint256 vestedBalanceWeighted);
 
     function countContributors() external view returns (uint256);
 
     function contributorsList() external view returns (address[] memory);
 
-    function contributorVestingContracts(address contributor)
-        external
-        view
-        returns (address[] memory);
+    function contributorVestingContracts(address contributor) external view returns (address[] memory);
 }

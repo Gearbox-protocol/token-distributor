@@ -5,16 +5,20 @@ pragma solidity ^0.8.10;
 
 import "forge-std/Test.sol";
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import { TokenDistributor } from "../contracts/TokenDistributor.sol";
-import { IGearToken } from "../contracts/interfaces/IGearToken.sol";
-import { ITokenDistributorOld } from "../contracts/interfaces/ITokenDistributorOld.sol";
-import { IAddressProvider } from "../contracts/interfaces/IAddressProvider.sol";
-import { ITokenDistributorExceptions, ITokenDistributorEvents, TokenAllocationOpts } from "../contracts/interfaces/ITokenDistributor.sol";
-import { IStepVesting } from "../contracts/interfaces/IStepVesting.sol";
-import { DUMB_ADDRESS, DUMB_ADDRESS2, CONTROLLER, SECONDS_PER_YEAR, WAD } from "./constants.sol";
-import { PERCENTAGE_FACTOR } from "../contracts/helpers/Constants.sol";
+import {TokenDistributor} from "../contracts/TokenDistributor.sol";
+import {IGearToken} from "../contracts/interfaces/IGearToken.sol";
+import {ITokenDistributorOld} from "../contracts/interfaces/ITokenDistributorOld.sol";
+import {IAddressProvider} from "../contracts/interfaces/IAddressProvider.sol";
+import {
+    ITokenDistributorExceptions,
+    ITokenDistributorEvents,
+    TokenAllocationOpts
+} from "../contracts/interfaces/ITokenDistributor.sol";
+import {IStepVesting} from "../contracts/interfaces/IStepVesting.sol";
+import {DUMB_ADDRESS, DUMB_ADDRESS2, CONTROLLER, SECONDS_PER_YEAR, WAD} from "./constants.sol";
+import {PERCENTAGE_FACTOR} from "../contracts/helpers/Constants.sol";
 
 address constant ADDRESS_PROVIDER = 0xcF64698AFF7E5f27A11dff868AF228653ba53be0;
 address constant GEAR_TOKEN = 0xBa3335588D9403515223F109EdC4eB7269a9Ab5D;
@@ -22,11 +26,7 @@ address constant TOKEN_DISTRIBUTOR_OLD = 0xBF57539473913685688d224ad4E262684B23d
 
 /// @title TokenDistributorTest
 /// @notice Designed for unit test purposes only
-contract TokenDistributorTest is
-    Test,
-    ITokenDistributorEvents,
-    ITokenDistributorExceptions
-{
+contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributorExceptions {
     TokenDistributor public tokenDistributor;
     ITokenDistributorOld public tokenDistributorOld;
     IGearToken public gearToken;
@@ -41,9 +41,11 @@ contract TokenDistributorTest is
 
         tokenDistributor = new TokenDistributor(
             addressProvider,
-            tokenDistributorOld,
-            CONTROLLER
+            tokenDistributorOld
         );
+
+        vm.prank(addressProvider.getTreasuryContract());
+        tokenDistributor.setDistributionController(CONTROLLER);
 
         root = Ownable(addressProvider.getACL()).owner();
     }
@@ -56,17 +58,9 @@ contract TokenDistributorTest is
             "Master vesting contract incorrect"
         );
 
-        assertEq(
-            address(tokenDistributor.gearToken()),
-            address(gearToken),
-            "GEAR address incorrect"
-        );
+        assertEq(address(tokenDistributor.gearToken()), address(gearToken), "GEAR address incorrect");
 
-        assertEq(
-            tokenDistributor.treasury(),
-            addressProvider.getTreasuryContract(),
-            "Treasury incorrect"
-        );
+        assertEq(tokenDistributor.treasury(), addressProvider.getTreasuryContract(), "Treasury incorrect");
 
         assertEq(
             tokenDistributor.votingCategoryMultipliers("TYPE_A"),
@@ -134,153 +128,68 @@ contract TokenDistributorTest is
             vestingAmount: 365 * 8 * WAD
         });
 
-        vm.expectRevert(NotDistributionControllerException.selector);
-        tokenDistributor.distributeTokens(testOpts);
-
-        address treasury = addressProvider.getTreasuryContract();
-
-        vm.expectEmit(true, false, false, true);
-        emit VestingContractAdded(
-            DUMB_ADDRESS,
-            address(0),
-            465 * WAD,
-            "TYPE_A"
-        );
+        for (uint256 i; i < testOpts.length; ++i) {
+            vm.expectRevert(NotDistributionControllerException.selector);
+            tokenDistributor.distributeTokens(testOpts[i]);
+        }
 
         vm.expectEmit(true, false, false, true);
-        emit VestingContractAdded(
-            DUMB_ADDRESS,
-            address(0),
-            365 * 4 * WAD,
-            "TYPE_B"
-        );
+        emit VestingContractAdded(DUMB_ADDRESS, address(0), 465 * WAD, "TYPE_A");
 
         vm.expectEmit(true, false, false, true);
-        emit VestingContractAdded(
-            DUMB_ADDRESS2,
-            address(0),
-            365 * 8 * WAD,
-            "TYPE_ZERO"
-        );
+        emit VestingContractAdded(DUMB_ADDRESS, address(0), 365 * 4 * WAD, "TYPE_B");
 
-        vm.prank(CONTROLLER);
-        tokenDistributor.distributeTokens(testOpts);
+        vm.expectEmit(true, false, false, true);
+        emit VestingContractAdded(DUMB_ADDRESS2, address(0), 365 * 8 * WAD, "TYPE_ZERO");
 
-        address[] memory vcs0 = tokenDistributor.contributorVestingContracts(
-            DUMB_ADDRESS
-        );
+        for (uint256 i; i < testOpts.length; ++i) {
+            vm.prank(CONTROLLER);
+            tokenDistributor.distributeTokens(testOpts[i]);
+        }
 
-        assertEq(
-            vcs0.length,
-            2,
-            "Incorrect number of vesting contracts for contributor"
-        );
+        address[] memory vcs0 = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
+
+        assertEq(vcs0.length, 2, "Incorrect number of vesting contracts for contributor");
 
         // CHECKING VESTING CONTRACT 1
 
-        assertEq(
-            IStepVesting(vcs0[0]).cliffDuration(),
-            SECONDS_PER_YEAR,
-            "Incorrect cliff duration"
-        );
+        assertEq(IStepVesting(vcs0[0]).cliffDuration(), SECONDS_PER_YEAR, "Incorrect cliff duration");
 
-        assertEq(
-            IStepVesting(vcs0[0]).stepDuration(),
-            SECONDS_PER_YEAR / 365,
-            "Incorrect step duration"
-        );
+        assertEq(IStepVesting(vcs0[0]).stepDuration(), SECONDS_PER_YEAR / 365, "Incorrect step duration");
 
-        assertEq(
-            IStepVesting(vcs0[0]).cliffAmount(),
-            100 * WAD,
-            "Incorrect cliff amount"
-        );
+        assertEq(IStepVesting(vcs0[0]).cliffAmount(), 100 * WAD, "Incorrect cliff amount");
 
-        assertEq(
-            IStepVesting(vcs0[0]).stepAmount(),
-            WAD,
-            "Incorrect step amount"
-        );
+        assertEq(IStepVesting(vcs0[0]).stepAmount(), WAD, "Incorrect step amount");
 
-        assertEq(
-            IStepVesting(vcs0[0]).numOfSteps(),
-            365,
-            "Incorrect number of steps"
-        );
+        assertEq(IStepVesting(vcs0[0]).numOfSteps(), 365, "Incorrect number of steps");
 
         // CHECKING VESTING CONTRACT 2
 
-        assertEq(
-            IStepVesting(vcs0[1]).cliffDuration(),
-            SECONDS_PER_YEAR,
-            "Incorrect cliff duration"
-        );
+        assertEq(IStepVesting(vcs0[1]).cliffDuration(), SECONDS_PER_YEAR, "Incorrect cliff duration");
 
-        assertEq(
-            IStepVesting(vcs0[1]).stepDuration(),
-            SECONDS_PER_YEAR / 365,
-            "Incorrect step duration"
-        );
+        assertEq(IStepVesting(vcs0[1]).stepDuration(), SECONDS_PER_YEAR / 365, "Incorrect step duration");
 
-        assertEq(
-            IStepVesting(vcs0[1]).cliffAmount(),
-            0,
-            "Incorrect cliff amount"
-        );
+        assertEq(IStepVesting(vcs0[1]).cliffAmount(), 0, "Incorrect cliff amount");
 
-        assertEq(
-            IStepVesting(vcs0[1]).stepAmount(),
-            2 * WAD,
-            "Incorrect step amount"
-        );
+        assertEq(IStepVesting(vcs0[1]).stepAmount(), 2 * WAD, "Incorrect step amount");
 
-        assertEq(
-            IStepVesting(vcs0[1]).numOfSteps(),
-            365 * 2,
-            "Incorrect number of steps"
-        );
+        assertEq(IStepVesting(vcs0[1]).numOfSteps(), 365 * 2, "Incorrect number of steps");
 
-        address[] memory vcs1 = tokenDistributor.contributorVestingContracts(
-            DUMB_ADDRESS2
-        );
+        address[] memory vcs1 = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS2);
 
-        assertEq(
-            vcs1.length,
-            1,
-            "Incorrect number of vesting contracts for contributor"
-        );
+        assertEq(vcs1.length, 1, "Incorrect number of vesting contracts for contributor");
 
         // CHECKING VESTING CONTRACT 3
 
-        assertEq(
-            IStepVesting(vcs1[0]).cliffDuration(),
-            SECONDS_PER_YEAR,
-            "Incorrect cliff duration"
-        );
+        assertEq(IStepVesting(vcs1[0]).cliffDuration(), SECONDS_PER_YEAR, "Incorrect cliff duration");
 
-        assertEq(
-            IStepVesting(vcs1[0]).stepDuration(),
-            SECONDS_PER_YEAR / 365 / 2,
-            "Incorrect step duration"
-        );
+        assertEq(IStepVesting(vcs1[0]).stepDuration(), SECONDS_PER_YEAR / 365 / 2, "Incorrect step duration");
 
-        assertEq(
-            IStepVesting(vcs1[0]).cliffAmount(),
-            0,
-            "Incorrect cliff amount"
-        );
+        assertEq(IStepVesting(vcs1[0]).cliffAmount(), 0, "Incorrect cliff amount");
 
-        assertEq(
-            IStepVesting(vcs1[0]).stepAmount(),
-            2 * WAD,
-            "Incorrect step amount"
-        );
+        assertEq(IStepVesting(vcs1[0]).stepAmount(), 2 * WAD, "Incorrect step amount");
 
-        assertEq(
-            IStepVesting(vcs1[0]).numOfSteps(),
-            365 * 4,
-            "Incorrect number of steps"
-        );
+        assertEq(IStepVesting(vcs1[0]).numOfSteps(), 365 * 4, "Incorrect number of steps");
     }
 
     /// @dev [TD-5]: balanceOf returns expected amount
@@ -306,16 +215,10 @@ contract TokenDistributorTest is
         address treasury = addressProvider.getTreasuryContract();
 
         vm.prank(treasury);
-        tokenDistributor.updateVotingCategoryMultiplier(
-            "TYPE_TEST0",
-            votingMultiplier0
-        );
+        tokenDistributor.updateVotingCategoryMultiplier("TYPE_TEST0", votingMultiplier0);
 
         vm.prank(treasury);
-        tokenDistributor.updateVotingCategoryMultiplier(
-            "TYPE_TEST1",
-            votingMultiplier1
-        );
+        tokenDistributor.updateVotingCategoryMultiplier("TYPE_TEST1", votingMultiplier1);
 
         TokenAllocationOpts[] memory testOpts = new TokenAllocationOpts[](2);
 
@@ -342,40 +245,27 @@ contract TokenDistributorTest is
         hoax(treasury);
         gearToken.transfer(DUMB_ADDRESS, userBalance);
 
-        vm.prank(CONTROLLER);
-        tokenDistributor.distributeTokens(testOpts);
+        for (uint256 i; i < testOpts.length; ++i) {
+            vm.prank(CONTROLLER);
+            tokenDistributor.distributeTokens(testOpts[i]);
+        }
 
-        uint256 expectedAmount = userBalance +
-            ((cliffAmount0 + vestingAmount0) * votingMultiplier0) /
-            PERCENTAGE_FACTOR +
-            ((cliffAmount1 + vestingAmount1) * votingMultiplier1) /
-            PERCENTAGE_FACTOR;
+        uint256 expectedAmount = userBalance + ((cliffAmount0 + vestingAmount0) * votingMultiplier0) / PERCENTAGE_FACTOR
+            + ((cliffAmount1 + vestingAmount1) * votingMultiplier1) / PERCENTAGE_FACTOR;
 
         address[] memory vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
 
         hoax(treasury);
-        gearToken.transfer(
-            vcs[0],
-            cliffAmount0 + vestingAmount0
-        );
+        gearToken.transfer(vcs[0], cliffAmount0 + vestingAmount0);
 
         hoax(treasury);
-        gearToken.transfer(
-            vcs[1],
-            cliffAmount1 + vestingAmount1
-        );
+        gearToken.transfer(vcs[1], cliffAmount1 + vestingAmount1);
 
-        assertEq(
-            tokenDistributor.balanceOf(DUMB_ADDRESS),
-            expectedAmount,
-            "Reported balance incorrect"
-        );
+        assertEq(tokenDistributor.balanceOf(DUMB_ADDRESS), expectedAmount, "Reported balance incorrect");
     }
 
     /// @dev [TD-6]: updateVotingCategoryMultiplier sets correct value and emits an event
-    function test_TD_06_updateVotingCategoryMultiplier_works_correctly()
-        public
-    {
+    function test_TD_06_updateVotingCategoryMultiplier_works_correctly() public {
         vm.expectRevert(NotTreasuryException.selector);
         tokenDistributor.updateVotingCategoryMultiplier("TYPE_TEST0", 1000);
 
@@ -387,10 +277,7 @@ contract TokenDistributorTest is
         vm.prank(treasury);
         tokenDistributor.updateVotingCategoryMultiplier("TYPE_TEST0", 1000);
 
-        assertEq(
-            tokenDistributor.votingCategoryMultipliers("TYPE_TEST0"),
-            1000
-        );
+        assertEq(tokenDistributor.votingCategoryMultipliers("TYPE_TEST0"), 1000);
     }
 
     /// @dev [TD-7]: updateContributor works correctly
@@ -419,12 +306,12 @@ contract TokenDistributorTest is
 
         address treasury = addressProvider.getTreasuryContract();
 
-        vm.prank(CONTROLLER);
-        tokenDistributor.distributeTokens(testOpts);
+        for (uint256 i; i < testOpts.length; ++i) {
+            vm.prank(CONTROLLER);
+            tokenDistributor.distributeTokens(testOpts[i]);
+        }
 
-        address[] memory vcs = tokenDistributor.contributorVestingContracts(
-            DUMB_ADDRESS
-        );
+        address[] memory vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
 
         address vc0 = vcs[0];
         address vc1 = vcs[1];
@@ -443,19 +330,10 @@ contract TokenDistributorTest is
         hoax(CONTROLLER);
         tokenDistributor.updateContributors();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                NotDistributionControllerException.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(NotDistributionControllerException.selector));
         tokenDistributor.updateContributor(DUMB_ADDRESS);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ContributorNotRegisteredException.selector,
-                DUMB_ADDRESS
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(ContributorNotRegisteredException.selector, DUMB_ADDRESS));
         hoax(CONTROLLER);
         tokenDistributor.updateContributor(DUMB_ADDRESS);
 
@@ -492,12 +370,12 @@ contract TokenDistributorTest is
 
         address treasury = addressProvider.getTreasuryContract();
 
-        vm.prank(CONTROLLER);
-        tokenDistributor.distributeTokens(testOpts);
+        for (uint256 i; i < testOpts.length; ++i) {
+            vm.prank(CONTROLLER);
+            tokenDistributor.distributeTokens(testOpts[i]);
+        }
 
-        address[] memory vcs = tokenDistributor.contributorVestingContracts(
-            DUMB_ADDRESS
-        );
+        address[] memory vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
 
         address vc0 = vcs[0];
         address vc1 = vcs[1];
@@ -516,19 +394,10 @@ contract TokenDistributorTest is
         hoax(CONTROLLER);
         tokenDistributor.updateContributors();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                NotDistributionControllerException.selector
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(NotDistributionControllerException.selector));
         tokenDistributor.updateContributor(DUMB_ADDRESS);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ContributorNotRegisteredException.selector,
-                DUMB_ADDRESS
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(ContributorNotRegisteredException.selector, DUMB_ADDRESS));
         hoax(CONTROLLER);
         tokenDistributor.updateContributor(DUMB_ADDRESS);
 
@@ -539,9 +408,7 @@ contract TokenDistributorTest is
         assertEq(vcs[0], vc0, "Contract receiver was not changed");
     }
 
-
     function test_TD_09_setDistributionController_works_correctly() public {
-
         address treasury = addressProvider.getTreasuryContract();
 
         vm.expectRevert(NotTreasuryException.selector);
@@ -550,10 +417,22 @@ contract TokenDistributorTest is
         vm.prank(treasury);
         tokenDistributor.setDistributionController(DUMB_ADDRESS2);
 
-        assertEq(
-            tokenDistributor.distributionController(),
-            DUMB_ADDRESS2,
-            "Distribution controller was not set"
-        );
+        assertEq(tokenDistributor.distributionController(), DUMB_ADDRESS2, "Distribution controller was not set");
+    }
+
+    function test_TD_10_setDistributionController_works_correctly() public {
+        TokenAllocationOpts memory testOpts = TokenAllocationOpts({
+            recipient: DUMB_ADDRESS,
+            votingCategory: "NOT_IN_THE_LIST",
+            cliffDuration: SECONDS_PER_YEAR,
+            cliffAmount: 100 * WAD,
+            vestingDuration: SECONDS_PER_YEAR,
+            vestingNumSteps: 365,
+            vestingAmount: 365 * WAD
+        });
+
+        vm.expectRevert(VotingCategoryDoesntExists.selector);
+        vm.prank(CONTROLLER);
+        tokenDistributor.distributeTokens(testOpts);
     }
 }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.10;
 
-import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
-import { SafeMath } from "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { IGearToken } from "./interfaces/IGearToken.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IGearToken} from "./interfaces/IGearToken.sol";
 
 // Based on https://github.com/1inch/governance-contracts/blob/master/contracts/StepVesting.sol
 contract StepVesting is Initializable {
@@ -64,13 +64,8 @@ contract StepVesting is Initializable {
             return 0;
         }
 
-        uint256 passedSinceCliff = block.timestamp.sub(
-            started.add(cliffDuration)
-        );
-        uint256 stepsPassed = Math.min(
-            numOfSteps,
-            passedSinceCliff.div(stepDuration)
-        );
+        uint256 passedSinceCliff = block.timestamp.sub(started.add(cliffDuration));
+        uint256 stepsPassed = Math.min(numOfSteps, passedSinceCliff.div(stepDuration));
         return cliffAmount.add(stepsPassed.mul(stepAmount));
     }
 

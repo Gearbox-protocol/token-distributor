@@ -17,10 +17,7 @@ struct VestingContract {
 interface ITokenDistributorOld {
     function masterVestingContract() external view returns (address);
 
-    function vestingContracts(address contributor)
-        external
-        view
-        returns (VestingContract memory);
+    function vestingContracts(address contributor) external view returns (VestingContract memory);
 
     function weightA() external view returns (uint256);
 

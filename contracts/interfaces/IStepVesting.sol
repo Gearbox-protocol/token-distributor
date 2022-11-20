@@ -4,7 +4,7 @@
 
 pragma solidity ^0.8.10;
 
-import { IGearToken } from "./IGearToken.sol";
+import {IGearToken} from "./IGearToken.sol";
 
 interface IStepVesting {
     function receiver() external view returns (address);

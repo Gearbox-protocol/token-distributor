@@ -3,20 +3,20 @@
 // (c) Gearbox Holdings, 2021
 pragma solidity ^0.8.10;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { Clones } from "@openzeppelin/contracts/proxy/Clones.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 
-import { PERCENTAGE_FACTOR } from "./helpers/Constants.sol";
+import {PERCENTAGE_FACTOR} from "./helpers/Constants.sol";
 
-import { IAddressProvider } from "./interfaces/IAddressProvider.sol";
-import { IGearToken } from "./interfaces/IGearToken.sol";
-import { StepVesting } from "./Vesting.sol";
-import { IStepVesting } from "./interfaces/IStepVesting.sol";
-import { ITokenDistributorOld, VestingContract, VotingPower } from "./interfaces/ITokenDistributorOld.sol";
-import { ITokenDistributor, TokenAllocationOpts } from "./interfaces/ITokenDistributor.sol";
+import {IAddressProvider} from "./interfaces/IAddressProvider.sol";
+import {IGearToken} from "./interfaces/IGearToken.sol";
+import {StepVesting} from "./Vesting.sol";
+import {IStepVesting} from "./interfaces/IStepVesting.sol";
+import {ITokenDistributorOld, VestingContract, VotingPower} from "./interfaces/ITokenDistributorOld.sol";
+import {ITokenDistributor, TokenAllocationOpts} from "./interfaces/ITokenDistributor.sol";
 
 contract TokenDistributor is ITokenDistributor {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -42,67 +42,50 @@ contract TokenDistributor is ITokenDistributor {
     /// @dev Mapping from voting categories to corresponding voting power multipliers
     mapping(string => uint16) public votingCategoryMultipliers;
 
+    /// @dev Mapping from existing voting categories
+    mapping(string => bool) public votingCategoryExists;
+
     /// @dev Set of all known contributors
     EnumerableSet.AddressSet private contributorsSet;
 
     /// @param addressProvider address of Address provider
     /// @param tokenDistributorOld Address of the previous token distributor
-    /// @param _distributionController The address of the initial distribution controller
-    constructor(
-        IAddressProvider addressProvider,
-        ITokenDistributorOld tokenDistributorOld,
-        address _distributionController
-    ) {
+    constructor(IAddressProvider addressProvider, ITokenDistributorOld tokenDistributorOld) {
         masterVestingContract = tokenDistributorOld.masterVestingContract();
         gearToken = IGearToken(addressProvider.getGearToken()); // T:[TD-1]
         treasury = addressProvider.getTreasuryContract();
-        distributionController = _distributionController;
+        distributionController = addressProvider.getTreasuryContract();
 
         uint16 weightA = uint16(tokenDistributorOld.weightA());
         uint16 weightB = uint16(tokenDistributorOld.weightB());
 
-        votingCategoryMultipliers["TYPE_A"] = weightA;
-        votingCategoryMultipliers["TYPE_B"] = weightB;
+        _updateVotingCategoryMultiplier("TYPE_A", weightA);
+        _updateVotingCategoryMultiplier("TYPE_B", weightB);
+        _updateVotingCategoryMultiplier("TYPE_ZERO", 0);
 
-        emit NewVotingMultiplier("TYPE_A", weightA);
-        emit NewVotingMultiplier("TYPE_B", weightB);
-        emit NewVotingMultiplier("TYPE_ZERO", 0);
-
-        address[] memory oldContributors = tokenDistributorOld
-            .contributorsList();
+        address[] memory oldContributors = tokenDistributorOld.contributorsList();
 
         uint256 numOldContributors = oldContributors.length;
 
         for (uint256 i = 0; i < numOldContributors; ++i) {
-            VestingContract memory vc = tokenDistributorOld.vestingContracts(
-                oldContributors[i]
-            );
+            VestingContract memory vc = tokenDistributorOld.vestingContracts(oldContributors[i]);
 
-            _addVestingContractForContributor(
-                oldContributors[i],
-                vc.contractAddress
-            );
+            _addVestingContractForContributor(oldContributors[i], vc.contractAddress);
 
-            string memory votingCategory = vc.votingPower == VotingPower.A
-                ? "TYPE_A"
-                : vc.votingPower == VotingPower.B
-                ? "TYPE_B"
-                : "TYPE_ZERO";
+            string memory votingCategory =
+                vc.votingPower == VotingPower.A ? "TYPE_A" : vc.votingPower == VotingPower.B ? "TYPE_B" : "TYPE_ZERO";
 
             vestingContractVotingCategory[vc.contractAddress] = votingCategory;
 
             emit VestingContractAdded(
-                oldContributors[i],
-                vc.contractAddress,
-                gearToken.balanceOf(vc.contractAddress),
-                votingCategory
-            );
+                oldContributors[i], vc.contractAddress, gearToken.balanceOf(vc.contractAddress), votingCategory
+                );
         }
     }
 
     modifier distributionControllerOnly() {
         if (msg.sender != distributionController) {
-            revert NotDistributionControllerException();   
+            revert NotDistributionControllerException();
         }
         _;
     }
@@ -117,11 +100,7 @@ contract TokenDistributor is ITokenDistributor {
     /// @dev Returns the total GEAR balance of holder, including vested balances weighted with their respective
     ///      voting category multipliers. Used in snapshot voting.
     /// @param holder Address to calculate the weighted balance for
-    function balanceOf(address holder)
-        external
-        view
-        returns (uint256 vestedBalanceWeighted)
-    {
+    function balanceOf(address holder) external view returns (uint256 vestedBalanceWeighted) {
         uint256 numVestingContracts = vestingContracts[holder].length();
 
         for (uint256 i = 0; i < numVestingContracts; ++i) {
@@ -129,12 +108,9 @@ contract TokenDistributor is ITokenDistributor {
             address receiver = IStepVesting(vc).receiver();
 
             if (receiver == holder) {
-                vestedBalanceWeighted +=
-                    (gearToken.balanceOf(vc) *
-                        votingCategoryMultipliers[
-                            vestingContractVotingCategory[vc]
-                        ]) /
-                    PERCENTAGE_FACTOR;
+                vestedBalanceWeighted += (
+                    gearToken.balanceOf(vc) * votingCategoryMultipliers[vestingContractVotingCategory[vc]]
+                ) / PERCENTAGE_FACTOR;
             }
         }
 
@@ -154,13 +130,8 @@ contract TokenDistributor is ITokenDistributor {
     ///             * vestingDuration - time until all tokens are unlocked, starting from cliff
     ///             * vestingNumSteps - number of ticks at which tokens are unlocked
     ///             * vestingAmount - total number of tokens unlocked during the vesting period (excluding cliff)
-    function distributeTokens(TokenAllocationOpts[] calldata opts)
-        external
-        distributionControllerOnly
-    {
-        for (uint256 i = 0; i < opts.length; ++i) {
-            _deployVestingContract(opts[i]);
-        }
+    function distributeTokens(TokenAllocationOpts calldata opts) external distributionControllerOnly {
+        _deployVestingContract(opts);
     }
 
     //
@@ -194,23 +165,23 @@ contract TokenDistributor is ITokenDistributor {
     /// @dev Updates the voting weight for a particular voting category
     /// @param category The name of the category to update the multiplier for
     /// @param multiplier The voting power weight for all vested GEAR belonging to the category
-    function updateVotingCategoryMultiplier(
-        string calldata category,
-        uint16 multiplier
-    ) external treasuryOnly {
+    function updateVotingCategoryMultiplier(string calldata category, uint16 multiplier) external treasuryOnly {
+        _updateVotingCategoryMultiplier(category, multiplier);
+    }
+
+    function _updateVotingCategoryMultiplier(string memory category, uint16 multiplier) internal {
         if (multiplier > PERCENTAGE_FACTOR) {
             revert MultiplierValueIncorrect();
         }
 
         votingCategoryMultipliers[category] = multiplier;
+        votingCategoryExists[category] = true;
         emit NewVotingMultiplier(category, multiplier);
     }
-    
+
     /// @dev Changes the distribution controller
     /// @param newController Address of the new distribution controller
-    function setDistributionController(
-        address newController
-    ) external treasuryOnly {
+    function setDistributionController(address newController) external treasuryOnly {
         distributionController = newController;
         emit NewDistrubtionController(newController);
     }
@@ -236,11 +207,7 @@ contract TokenDistributor is ITokenDistributor {
     }
 
     /// @dev Returns the active vesting contracts for a particular contributor
-    function contributorVestingContracts(address contributor)
-        external
-        view
-        returns (address[] memory)
-    {
+    function contributorVestingContracts(address contributor) external view returns (address[] memory) {
         return vestingContracts[contributor].values();
     }
 
@@ -250,6 +217,9 @@ contract TokenDistributor is ITokenDistributor {
 
     /// @dev Deploys a vesting contract for a new allocation
     function _deployVestingContract(TokenAllocationOpts memory opts) internal {
+        if (!votingCategoryExists[opts.votingCategory]) {
+            revert VotingCategoryDoesntExists();
+        }
         address vc = Clones.clone(address(masterVestingContract));
 
         IStepVesting(vc).initialize(
@@ -267,12 +237,7 @@ contract TokenDistributor is ITokenDistributor {
 
         vestingContractVotingCategory[vc] = opts.votingCategory;
 
-        emit VestingContractAdded(
-            opts.recipient,
-            vc,
-            opts.cliffAmount + opts.vestingAmount,
-            opts.votingCategory
-        );
+        emit VestingContractAdded(opts.recipient, vc, opts.cliffAmount + opts.vestingAmount, opts.votingCategory);
     }
 
     /// @dev Cleans up all vesting contracts currently belonging to a contributor
@@ -282,7 +247,7 @@ contract TokenDistributor is ITokenDistributor {
         address[] memory vcs = vestingContracts[contributor].values();
         uint256 numVestingContracts = vcs.length;
 
-        for (uint256 i = 0; i < numVestingContracts; ) {
+        for (uint256 i = 0; i < numVestingContracts;) {
             address vc = vcs[i];
             _cleanupVestingContract(contributor, vc);
 
@@ -312,9 +277,7 @@ contract TokenDistributor is ITokenDistributor {
 
     /// @dev Associates a vesting contract with a contributor, and adds a contributor
     ///      to the list, if it did not exist before
-    function _addVestingContractForContributor(address contributor, address vc)
-        internal
-    {
+    function _addVestingContractForContributor(address contributor, address vc) internal {
         if (!contributorsSet.contains(contributor)) {
             contributorsSet.add(contributor);
         }
