@@ -70,7 +70,9 @@ contract TokenDistributor is ITokenDistributor {
         for (uint256 i = 0; i < numOldContributors; ++i) {
             VestingContract memory vc = tokenDistributorOld.vestingContracts(oldContributors[i]);
 
-            _addVestingContractForContributor(oldContributors[i], vc.contractAddress);
+            address receiver = StepVesting(vc.contractAddress).receiver();
+
+            _addVestingContractForContributor(vc.contractAddress, receiver);
 
             string memory votingCategory =
                 vc.votingPower == VotingPower.A ? "TYPE_A" : vc.votingPower == VotingPower.B ? "TYPE_B" : "TYPE_ZERO";
@@ -78,7 +80,7 @@ contract TokenDistributor is ITokenDistributor {
             vestingContractVotingCategory[vc.contractAddress] = votingCategory;
 
             emit VestingContractAdded(
-                oldContributors[i], vc.contractAddress, gearToken.balanceOf(vc.contractAddress), votingCategory
+                receiver, vc.contractAddress, gearToken.balanceOf(vc.contractAddress), votingCategory
                 );
         }
     }
@@ -140,21 +142,22 @@ contract TokenDistributor is ITokenDistributor {
 
     /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
     ///      and vesting contracts, for a particular contributor
-    function updateContributor(address contributor) external distributionControllerOnly {
+    function updateContributor(address contributor) external {
         if (!contributorsSet.contains(contributor)) {
             revert ContributorNotRegisteredException(contributor);
         }
-        _cleanupContributor(contributor);
+        _cleanupContributor(contributor, msg.sender == distributionController);
     }
 
     /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
     ///      and vesting contracts, for all recorded contributors
-    function updateContributors() external distributionControllerOnly {
+    function updateContributors() external {
         address[] memory contributorsArray = contributorsSet.values();
         uint256 numContributors = contributorsArray.length;
+        bool removeZeroBalance = msg.sender == distributionController;
 
         for (uint256 i = 0; i < numContributors; i++) {
-            _cleanupContributor(contributorsArray[i]);
+            _cleanupContributor(contributorsArray[i], removeZeroBalance);
         }
     }
 
@@ -233,7 +236,7 @@ contract TokenDistributor is ITokenDistributor {
             opts.recipient
         );
 
-        _addVestingContractForContributor(opts.recipient, vc);
+        _addVestingContractForContributor(vc, opts.recipient);
 
         vestingContractVotingCategory[vc] = opts.votingCategory;
 
@@ -243,13 +246,13 @@ contract TokenDistributor is ITokenDistributor {
     /// @dev Cleans up all vesting contracts currently belonging to a contributor
     ///      If there are no more active vesting contracts after cleanup, removes
     ///      the contributor from the list
-    function _cleanupContributor(address contributor) internal {
+    function _cleanupContributor(address contributor, bool removeZeroBalance) internal {
         address[] memory vcs = vestingContracts[contributor].values();
         uint256 numVestingContracts = vcs.length;
 
         for (uint256 i = 0; i < numVestingContracts;) {
             address vc = vcs[i];
-            _cleanupVestingContract(contributor, vc);
+            _cleanupVestingContract(contributor, vc, removeZeroBalance);
 
             unchecked {
                 ++i;
@@ -263,25 +266,25 @@ contract TokenDistributor is ITokenDistributor {
 
     /// @dev Removes the contract from the list if it was exhausted, or
     ///      updates the associated contributor if the receiver was changed
-    function _cleanupVestingContract(address contributor, address vc) internal {
+    function _cleanupVestingContract(address contributor, address vc, bool removeZeroBalance) internal {
         address receiver = IStepVesting(vc).receiver();
 
-        if (gearToken.balanceOf(vc) == 0) {
+        if (gearToken.balanceOf(vc) == 0 && removeZeroBalance) {
             vestingContracts[contributor].remove(vc);
         } else if (receiver != contributor) {
             vestingContracts[contributor].remove(vc);
-            _addVestingContractForContributor(receiver, vc);
+            _addVestingContractForContributor(vc, receiver);
             emit VestingContractReceiverUpdated(vc, contributor, receiver);
         }
     }
 
     /// @dev Associates a vesting contract with a contributor, and adds a contributor
     ///      to the list, if it did not exist before
-    function _addVestingContractForContributor(address contributor, address vc) internal {
-        if (!contributorsSet.contains(contributor)) {
-            contributorsSet.add(contributor);
+    function _addVestingContractForContributor(address vc, address receiver) internal {
+        if (!contributorsSet.contains(receiver)) {
+            contributorsSet.add(receiver);
         }
 
-        vestingContracts[contributor].add(vc);
+        vestingContracts[receiver].add(vc);
     }
 }
