@@ -50,6 +50,21 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
         root = Ownable(addressProvider.getACL()).owner();
     }
 
+    function _distributeTokens(TokenAllocationOpts[] memory testOpts) internal {
+        for (uint256 i; i < testOpts.length; ++i) {
+            vm.prank(CONTROLLER);
+            tokenDistributor.distributeTokens(
+                testOpts[i].recipient,
+                testOpts[i].votingCategory,
+                testOpts[i].cliffDuration,
+                testOpts[i].cliffAmount,
+                testOpts[i].vestingDuration,
+                testOpts[i].vestingNumSteps,
+                testOpts[i].vestingAmount
+            );
+        }
+    }
+
     /// @dev [TD-1]: Constructor sets correct values
     function test_TD_01_constructor_sets_correct_values() public {
         assertEq(
@@ -120,10 +135,16 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
             vestingAmount: 365 * 8 * WAD
         });
 
-        for (uint256 i; i < testOpts.length; ++i) {
-            vm.expectRevert(NotDistributionControllerException.selector);
-            tokenDistributor.distributeTokens(testOpts[i]);
-        }
+        vm.expectRevert(NotDistributionControllerException.selector);
+        tokenDistributor.distributeTokens(
+            testOpts[0].recipient,
+            testOpts[0].votingCategory,
+            testOpts[0].cliffDuration,
+            testOpts[0].cliffAmount,
+            testOpts[0].vestingDuration,
+            testOpts[0].vestingNumSteps,
+            testOpts[0].vestingAmount
+        );
 
         vm.expectEmit(true, false, false, true);
         emit VestingContractAdded(DUMB_ADDRESS, address(0), 465 * WAD, "TYPE_A");
@@ -134,10 +155,7 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
         vm.expectEmit(true, false, false, true);
         emit VestingContractAdded(DUMB_ADDRESS2, address(0), 365 * 8 * WAD, "TYPE_ZERO");
 
-        for (uint256 i; i < testOpts.length; ++i) {
-            vm.prank(CONTROLLER);
-            tokenDistributor.distributeTokens(testOpts[i]);
-        }
+        _distributeTokens(testOpts);
 
         address[] memory vcs0 = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
 
@@ -237,10 +255,7 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
         hoax(treasury);
         gearToken.transfer(DUMB_ADDRESS, userBalance);
 
-        for (uint256 i; i < testOpts.length; ++i) {
-            vm.prank(CONTROLLER);
-            tokenDistributor.distributeTokens(testOpts[i]);
-        }
+        _distributeTokens(testOpts);
 
         uint256 expectedAmount = userBalance + ((cliffAmount0 + vestingAmount0) * votingMultiplier0) / PERCENTAGE_FACTOR
             + ((cliffAmount1 + vestingAmount1) * votingMultiplier1) / PERCENTAGE_FACTOR;
@@ -288,10 +303,7 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
 
         address treasury = addressProvider.getTreasuryContract();
 
-        for (uint256 i; i < testOpts.length; ++i) {
-            vm.prank(CONTROLLER);
-            tokenDistributor.distributeTokens(testOpts[i]);
-        }
+        _distributeTokens(testOpts);
 
         address[] memory vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
 
@@ -328,10 +340,7 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
 
         address treasury = addressProvider.getTreasuryContract();
 
-        for (uint256 i; i < testOpts.length; ++i) {
-            vm.prank(CONTROLLER);
-            tokenDistributor.distributeTokens(testOpts[i]);
-        }
+        _distributeTokens(testOpts);
 
         address[] memory vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
 
@@ -383,10 +392,7 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
 
         address treasury = addressProvider.getTreasuryContract();
 
-        for (uint256 i; i < testOpts.length; ++i) {
-            vm.prank(CONTROLLER);
-            tokenDistributor.distributeTokens(testOpts[i]);
-        }
+        _distributeTokens(testOpts);
 
         address[] memory vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
 
@@ -449,10 +455,7 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
 
         address treasury = addressProvider.getTreasuryContract();
 
-        for (uint256 i; i < testOpts.length; ++i) {
-            vm.prank(CONTROLLER);
-            tokenDistributor.distributeTokens(testOpts[i]);
-        }
+        _distributeTokens(testOpts);
 
         address[] memory vcs = tokenDistributor.contributorVestingContracts(DUMB_ADDRESS);
 
@@ -500,7 +503,9 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
     }
 
     function test_TD_10_setDistributionController_works_correctly() public {
-        TokenAllocationOpts memory testOpts = TokenAllocationOpts({
+        TokenAllocationOpts[] memory testOpts = new TokenAllocationOpts[](1);
+
+        testOpts[0] = TokenAllocationOpts({
             recipient: DUMB_ADDRESS,
             votingCategory: "NOT_IN_THE_LIST",
             cliffDuration: SECONDS_PER_YEAR,
@@ -511,7 +516,6 @@ contract TokenDistributorTest is Test, ITokenDistributorEvents, ITokenDistributo
         });
 
         vm.expectRevert(VotingCategoryDoesntExist.selector);
-        vm.prank(CONTROLLER);
-        tokenDistributor.distributeTokens(testOpts);
+        _distributeTokens(testOpts);
     }
 }

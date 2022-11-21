@@ -124,15 +124,33 @@ contract TokenDistributor is ITokenDistributor {
     //
 
     /// @dev Creates a batch of new GEAR vesting contracts with passed parameters
-    /// @param opts Parameters for each vesting contract
-    ///             * recipient - Address to set as the vesting contract receiver
-    ///             * votingCategory - The voting category used to determine the vested GEARs' voting weight
-    ///             * cliffDuration - time until first payout
-    ///             * cliffAmount - size of first payout
-    ///             * vestingDuration - time until all tokens are unlocked, starting from cliff
-    ///             * vestingNumSteps - number of ticks at which tokens are unlocked
-    ///             * vestingAmount - total number of tokens unlocked during the vesting period (excluding cliff)
-    function distributeTokens(TokenAllocationOpts calldata opts) external distributionControllerOnly {
+    /// @param recipient Address to set as the vesting contract receiver
+    /// @param votingCategory The voting category used to determine the vested GEARs' voting weight
+    /// @param cliffDuration Time until first payout
+    /// @param cliffAmount Size of first payout
+    /// @param vestingDuration Time until all tokens are unlocked, starting from cliff
+    /// @param vestingNumSteps Number of ticks at which tokens are unlocked
+    /// @param vestingAmount Total number of tokens unlocked during the vesting period (excluding cliff)
+    function distributeTokens(
+        address recipient,
+        string calldata votingCategory,
+        uint256 cliffDuration,
+        uint256 cliffAmount,
+        uint256 vestingDuration,
+        uint256 vestingNumSteps,
+        uint256 vestingAmount
+    ) external distributionControllerOnly {
+
+        TokenAllocationOpts memory opts = TokenAllocationOpts({
+            recipient: recipient,
+            votingCategory: votingCategory,
+            cliffDuration: cliffDuration,
+            cliffAmount: cliffAmount,
+            vestingDuration: vestingDuration,
+            vestingNumSteps: vestingNumSteps,
+            vestingAmount: vestingAmount
+        });
+
         _deployVestingContract(opts);
     }
 
@@ -236,7 +254,9 @@ contract TokenDistributor is ITokenDistributor {
     //
 
     /// @dev Deploys a vesting contract for a new allocation
-    function _deployVestingContract(TokenAllocationOpts memory opts) internal {
+    function _deployVestingContract(
+        TokenAllocationOpts memory opts
+    ) internal {
         if (!votingCategoryExists[opts.votingCategory]) {
             revert VotingCategoryDoesntExist();
         }
