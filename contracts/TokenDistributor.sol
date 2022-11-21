@@ -143,18 +143,33 @@ contract TokenDistributor is ITokenDistributor {
     /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
     ///      and vesting contracts, for a particular contributor
     function updateContributor(address contributor) external {
+        _updateContributor(contributor, false);
+    }
+
+    function cleanupContributor(address contributor) external distributionControllerOnly {
+        _updateContributor(contributor, true);
+    }
+
+    function _updateContributor(address contributor, bool removeZeroBalance) internal {
         if (!contributorsSet.contains(contributor)) {
             revert ContributorNotRegisteredException(contributor);
         }
-        _cleanupContributor(contributor, msg.sender == distributionController);
+        _cleanupContributor(contributor, removeZeroBalance);
     }
 
     /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
     ///      and vesting contracts, for all recorded contributors
     function updateContributors() external {
+        _updateContributors(false);
+    }
+
+    function cleanupContributors() external distributionControllerOnly {
+        _updateContributors(true);
+    }
+
+    function _updateContributors(bool removeZeroBalance) internal {
         address[] memory contributorsArray = contributorsSet.values();
         uint256 numContributors = contributorsArray.length;
-        bool removeZeroBalance = msg.sender == distributionController;
 
         for (uint256 i = 0; i < numContributors; i++) {
             _cleanupContributor(contributorsArray[i], removeZeroBalance);
