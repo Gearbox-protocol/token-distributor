@@ -53,7 +53,15 @@ interface ITokenDistributorEvents {
 }
 
 interface ITokenDistributor is ITokenDistributorExceptions, ITokenDistributorEvents {
-    function distributeTokens(TokenAllocationOpts calldata opts) external;
+    function distributeTokens(
+        address recipient,
+        string calldata votingCategory,
+        uint256 cliffDuration,
+        uint256 cliffAmount,
+        uint256 vestingDuration,
+        uint256 vestingNumSteps,
+        uint256 vestingAmount
+    ) external;
 
     function updateContributor(address contributor) external;
 
