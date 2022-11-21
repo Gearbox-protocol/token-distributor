@@ -31,7 +31,7 @@ interface ITokenDistributorExceptions {
     error MultiplierValueIncorrect();
 
     /// @dev Thrown if voting category doesn't exist
-    error VotingCategoryDoesntExists();
+    error VotingCategoryDoesntExist();
 }
 
 interface ITokenDistributorEvents {

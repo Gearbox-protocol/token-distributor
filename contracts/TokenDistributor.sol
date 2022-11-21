@@ -140,12 +140,12 @@ contract TokenDistributor is ITokenDistributor {
     // CONTRIBUTOR HOUSEKEEPING
     //
 
-    /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
-    ///      and vesting contracts, for a particular contributor
+    /// @dev Updates the receiver on the passed contributor's VCs, if needed
     function updateContributor(address contributor) external {
         _updateContributor(contributor, false);
     }
 
+    /// @dev Updates the receiver on the passed contributor's VCs and cleans up spent contracts
     function cleanupContributor(address contributor) external distributionControllerOnly {
         _updateContributor(contributor, true);
     }
@@ -157,12 +157,14 @@ contract TokenDistributor is ITokenDistributor {
         _cleanupContributor(contributor, removeZeroBalance);
     }
 
-    /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
+    /// @dev Aligns the receiver between this contract
     ///      and vesting contracts, for all recorded contributors
     function updateContributors() external {
         _updateContributors(false);
     }
 
+    /// @dev Cleans up exhausted vesting contracts and aligns the receiver between this contract
+    ///      and vesting contracts, for all recorded contributors
     function cleanupContributors() external distributionControllerOnly {
         _updateContributors(true);
     }
@@ -236,7 +238,7 @@ contract TokenDistributor is ITokenDistributor {
     /// @dev Deploys a vesting contract for a new allocation
     function _deployVestingContract(TokenAllocationOpts memory opts) internal {
         if (!votingCategoryExists[opts.votingCategory]) {
-            revert VotingCategoryDoesntExists();
+            revert VotingCategoryDoesntExist();
         }
         address vc = Clones.clone(address(masterVestingContract));
 
