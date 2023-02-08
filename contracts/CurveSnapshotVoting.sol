@@ -21,8 +21,10 @@ contract CurveSnapshotVoting {
         uint256 tokens = CurveGEARETHPool(curvePool).balances(0);
         uint256 totalSupply = IERC20(curvePool).totalSupply();
 
-        uint256 balance = IERC20(curveGauge).balanceOf(holder) + IERC20(curveLP).balanceOf(holder)
-            + IERC20(convexRewardPool).balanceOf(holder);
+        uint256 balance = holder == convexRewardPool
+            ? 0
+            : IERC20(curveGauge).balanceOf(holder) + IERC20(curveLP).balanceOf(holder)
+                + IERC20(convexRewardPool).balanceOf(holder);
 
         return balance * tokens / totalSupply;
     }
