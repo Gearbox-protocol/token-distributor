@@ -13,7 +13,6 @@ address constant curvePool = 0x0E9B5B092caD6F1c5E6bc7f89Ffe1abb5c95F1C2;
 address constant curveGauge = 0x37Efc3f05D659B30A83cf0B07522C9d08513Ca9d;
 address constant curveLP = 0x5Be6C45e2d074fAa20700C49aDA3E88a1cc0025d;
 address constant convexRewardPool = 0x502Cc0d946e79CeA4DaafCf21F374C6bce763067;
-address constant gearToken = 0xBa3335588D9403515223F109EdC4eB7269a9Ab5D;
 
 contract CurveSnapshotVoting {
     /// @dev Returns voting power of Curve LP + Curve Gauge + Convex Staking
